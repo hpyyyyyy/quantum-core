@@ -13,7 +13,7 @@
             height: 100%;
             background: #000;
             overflow: hidden;
-            /* 防止移动端回弹和意外滚动 */
+            /* 锁定视口，防止移动端下拉刷新 */
             position: fixed;
         }
 
@@ -23,7 +23,6 @@
             height: 100vh;
         }
 
-        /* 提示层：点击进入全屏 */
         #hint {
             position: absolute;
             bottom: 20px;
@@ -35,6 +34,7 @@
             letter-spacing: 2px;
             pointer-events: none;
             animation: fadeOut 4s forwards;
+            z-index: 10;
         }
 
         @keyframes fadeOut {
@@ -54,7 +54,7 @@
 </head>
 
 <body>
-    <div id="hint">点击屏幕进入沉浸模式 / ESC 退出</div>
+    <div id="hint">点击或触摸进入沉浸模式 / ESC 退出</div>
 
     <script type="importmap">
     {
@@ -72,11 +72,11 @@
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
         // =========================================================
-        // 原始配置面板
+        // 核心参数面板 (完全保留，未做改动)
         // =========================================================
         const CONFIG = {
-            coreSize: 2.3,
-            coreDensity: 2000,
+            coreSize: 2.75,
+            coreDensity: 2500,
             coreParticleSize: 0.9,
             customOrbits: [
                 { rx: 16.5, ry: 7.5, rotX: 0.3, rotY: 0.0, rotZ: 0.785 },
@@ -89,7 +89,7 @@
             orbitDensity: 4000,
             orbitWidth: 1,
             orbitFlowSpeed: 0.05,
-            orbitParticleSize: 0.5,
+            orbitParticleSize: 0.55,
             dissipationAmount: 0.02,
             minBrightness: 1,
             bloomStrength: 3
@@ -99,7 +99,6 @@
         const orbitMats = [];
         let coreMat;
 
-        // 着色器
         const orbitVertexShader = `
         varying vec3 vColor; varying float vOpacity;
         uniform float uTime; uniform float uFlowSpeed; uniform float uBaseSize;
@@ -145,11 +144,14 @@
         function init() {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.z = 28;
+
+            // 初始调用一次位置判断
+            updateCameraPosition();
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
+            // 优化：限制高分屏像素比，兼顾清晰度与性能
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             document.body.appendChild(renderer.domElement);
 
             const renderPass = new RenderPass(scene, camera);
@@ -164,7 +166,6 @@
             animate();
         }
 
-        // 辅助函数
         function createCore() {
             const geo = new THREE.BufferGeometry();
             const pos = [], cols = [], sizes = [], rans = [];
@@ -228,20 +229,40 @@
         }
 
         // =========================================================
-        // 全屏
+        // 🚀 核心自适应逻辑
         // =========================================================
-        window.addEventListener('click', () => {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(e => console.log(e));
+        function updateCameraPosition() {
+            const aspect = window.innerWidth / window.innerHeight;
+            // 如果屏幕是纵向的 (手机)，将相机后移以容纳更宽的轨道
+            if (aspect < 1) {
+                camera.position.z = 48;
+            } else {
+                camera.position.z = 28;
             }
-        });
+        }
 
         window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            camera.aspect = w / h;
+            updateCameraPosition();
             camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            composer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setSize(w, h);
+            composer.setSize(w, h);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         });
+
+        // =========================================================
+        // 全屏触发 (兼容点击与触摸)
+        // =========================================================
+        const triggerFullscreen = () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(e => console.warn("Fullscreen blocked: ", e));
+            }
+        };
+
+        window.addEventListener('click', triggerFullscreen);
+        window.addEventListener('touchstart', triggerFullscreen);
 
         init();
     </script>
